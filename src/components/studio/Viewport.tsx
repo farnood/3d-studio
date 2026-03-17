@@ -16,6 +16,7 @@ export type ViewportCommandInput =
 type ViewportProps = {
   showGrid: boolean;
   showGizmo?: boolean;
+  allowNavigation?: boolean;
   viewportCommand: ViewportCommand | null;
   issueCommand: (command: ViewportCommandInput) => void;
   toggleGrid: () => void;
@@ -26,6 +27,7 @@ type ViewportProps = {
 export default function Viewport({
   showGrid,
   showGizmo = true,
+  allowNavigation = true,
   viewportCommand,
   issueCommand,
   toggleGrid,
@@ -45,6 +47,10 @@ export default function Viewport({
       tabIndex={0}
       onPointerDown={() => viewportRef.current?.focus()}
       onKeyDown={(event) => {
+        if (!allowNavigation) {
+          return;
+        }
+
         if (event.altKey || event.ctrlKey || event.metaKey) {
           return;
         }
@@ -109,6 +115,7 @@ export default function Viewport({
           viewportCommand={viewportCommand}
           showGrid={showGrid}
           showGizmo={showGizmo}
+          allowNavigation={allowNavigation}
           viewerEffectsEnabled={previewInteraction}
         />
       </Canvas>

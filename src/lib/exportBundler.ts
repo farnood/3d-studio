@@ -160,8 +160,8 @@ export async function generateExportHtml(scene: SceneDescriptor): Promise<string
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.08;
-        controls.enablePan = true;
-        controls.enableZoom = true;
+        controls.enablePan = config.interaction.panEnabled;
+        controls.enableZoom = config.interaction.zoomEnabled;
         controls.enableRotate = config.interaction.orbitEnabled;
         controls.screenSpacePanning = true;
         controls.zoomSpeed = 0.9;

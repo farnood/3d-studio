@@ -102,6 +102,7 @@ export default function ExportView() {
         subtitle="Export"
         currentMode="export"
         onModeChange={setMode}
+        showViewControls={false}
         showGrid={showGrid}
         issueCommand={issueViewportCommand}
         toggleGrid={toggleShowGrid}
@@ -132,6 +133,7 @@ export default function ExportView() {
               <Viewport
                 showGrid={isPreparingCleanCapture ? false : showGrid}
                 showGizmo={!isPreparingCleanCapture}
+                allowNavigation={false}
                 viewportCommand={viewportCommand}
                 issueCommand={issueViewportCommand}
                 toggleGrid={toggleShowGrid}
@@ -166,7 +168,7 @@ export default function ExportView() {
               </div>
             ) : null}
 
-            <InteractionControls description="These settings are applied to the exported HTML viewer. Cursor-driven motion is also previewed here." />
+            <InteractionControls description="These settings are applied to the exported HTML viewer. This preview lets you test them without overwriting the authored studio camera." />
 
             <div className="inspector-section">
               <h5 className="section-eyebrow">PNG Snapshot</h5>
@@ -184,7 +186,7 @@ export default function ExportView() {
 
             <div className="inspector-section note-card">
               <h5 className="section-eyebrow">Export Notes</h5>
-              Use the top bar to frame and switch views before exporting. The generated file captures the current scene state.
+              Compose and frame the scene in Studio. Export preview starts from that authored camera, but its viewer interactions stay local and do not overwrite the studio framing.
             </div>
           </div>
         </aside>

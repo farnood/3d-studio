@@ -73,6 +73,8 @@ export interface CameraConfig {
 
 export interface InteractionConfig {
   orbitEnabled: boolean;
+  panEnabled: boolean;
+  zoomEnabled: boolean;
   orbitRange: number;
   springBack: boolean;
   springStiffness: number;

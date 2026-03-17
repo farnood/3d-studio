@@ -7,6 +7,7 @@ type WorkspaceTopBarProps = {
   subtitle: string;
   currentMode: UiMode;
   onModeChange: (mode: UiMode) => void;
+  showViewControls?: boolean;
   showGrid: boolean;
   issueCommand: (command: ViewportCommandInput) => void;
   toggleGrid: () => void;
@@ -18,6 +19,7 @@ export default function WorkspaceTopBar({
   subtitle,
   currentMode,
   onModeChange,
+  showViewControls = true,
   showGrid,
   issueCommand,
   toggleGrid,
@@ -47,35 +49,37 @@ export default function WorkspaceTopBar({
       </div>
 
       <div className="workspace-topbar__section workspace-topbar__section--center">
-        <div className="toolbar-group">
-          <span className="toolbar-group__label">View</span>
-          <div className="toolbar-cluster">
-            <button className="toolbar-button" onClick={() => issueCommand({ type: 'frame' })}>
-              Frame
-            </button>
-            <button className="toolbar-button" onClick={() => issueCommand({ type: 'reset' })}>
-              Reset
-            </button>
-            <button className="toolbar-button" onClick={() => issueCommand({ type: 'view', preset: 'iso' })}>
-              Iso
-            </button>
-            <button className="toolbar-button" onClick={() => issueCommand({ type: 'view', preset: 'front' })}>
-              Front
-            </button>
-            <button className="toolbar-button" onClick={() => issueCommand({ type: 'view', preset: 'right' })}>
-              Right
-            </button>
-            <button className="toolbar-button" onClick={() => issueCommand({ type: 'view', preset: 'top' })}>
-              Top
-            </button>
-            <button
-              className={`toolbar-button ${showGrid ? 'toolbar-button--active' : ''}`}
-              onClick={toggleGrid}
-            >
-              Grid
-            </button>
+        {showViewControls ? (
+          <div className="toolbar-group">
+            <span className="toolbar-group__label">View</span>
+            <div className="toolbar-cluster">
+              <button className="toolbar-button" onClick={() => issueCommand({ type: 'frame' })}>
+                Frame
+              </button>
+              <button className="toolbar-button" onClick={() => issueCommand({ type: 'reset' })}>
+                Reset
+              </button>
+              <button className="toolbar-button" onClick={() => issueCommand({ type: 'view', preset: 'iso' })}>
+                Iso
+              </button>
+              <button className="toolbar-button" onClick={() => issueCommand({ type: 'view', preset: 'front' })}>
+                Front
+              </button>
+              <button className="toolbar-button" onClick={() => issueCommand({ type: 'view', preset: 'right' })}>
+                Right
+              </button>
+              <button className="toolbar-button" onClick={() => issueCommand({ type: 'view', preset: 'top' })}>
+                Top
+              </button>
+              <button
+                className={`toolbar-button ${showGrid ? 'toolbar-button--active' : ''}`}
+                onClick={toggleGrid}
+              >
+                Grid
+              </button>
+            </div>
           </div>
-        </div>
+        ) : null}
       </div>
 
       <div className="workspace-topbar__section workspace-topbar__section--right">

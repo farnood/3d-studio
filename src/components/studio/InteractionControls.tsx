@@ -19,11 +19,29 @@ export default function InteractionControls({
 
       <div className="control-stack">
         <label className="field field--row">
-          Enable Orbit
+          Allow Rotate
           <input
             type="checkbox"
             checked={scene.interaction.orbitEnabled}
             onChange={(e) => updateInteraction({ orbitEnabled: e.target.checked })}
+          />
+        </label>
+
+        <label className="field field--row">
+          Allow Pan
+          <input
+            type="checkbox"
+            checked={scene.interaction.panEnabled}
+            onChange={(e) => updateInteraction({ panEnabled: e.target.checked })}
+          />
+        </label>
+
+        <label className="field field--row">
+          Allow Zoom
+          <input
+            type="checkbox"
+            checked={scene.interaction.zoomEnabled}
+            onChange={(e) => updateInteraction({ zoomEnabled: e.target.checked })}
           />
         </label>
 

@@ -53,6 +53,8 @@ export const DEFAULT_TEMPLATE: SceneTemplate = {
     },
     interaction: {
       orbitEnabled: true,
+      panEnabled: true,
+      zoomEnabled: true,
       orbitRange: 30,
       springBack: true,
       springStiffness: 120,

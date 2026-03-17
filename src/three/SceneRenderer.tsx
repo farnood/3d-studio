@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import {
   ContactShadows,
@@ -12,6 +12,7 @@ import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
 import type { SceneDescriptor } from '../types';
 import { useSceneStore } from '../store/sceneStore';
+import { useUiStore } from '../store/uiStore';
 import DeviceModelLoader from './DeviceModelLoader';
 import { getCameraPosition, getCameraStateFromPosition } from '../lib/sceneUtils';
 
@@ -103,22 +104,26 @@ export default function SceneRenderer({
   viewportCommand,
   showGrid,
   showGizmo = true,
+  allowNavigation = true,
   viewerEffectsEnabled = false,
 }: {
   scene: SceneDescriptor;
   viewportCommand: ViewportCommand | null;
   showGrid: boolean;
   showGizmo?: boolean;
+  allowNavigation?: boolean;
   viewerEffectsEnabled?: boolean;
 }) {
   const { environment } = scene;
   const updateCamera = useSceneStore((state) => state.updateCamera);
   const baseScene = useSceneStore((state) => state.baseScene);
+  const setBeforeModeChange = useUiStore((state) => state.setBeforeModeChange);
+  const clearBeforeModeChange = useUiStore((state) => state.clearBeforeModeChange);
   const camera = useThree((state) => state.camera as THREE.PerspectiveCamera);
   const viewportSize = useThree((state) => state.size);
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
   const contentRef = useRef<THREE.Group>(null);
-  const syncTimeoutRef = useRef<number | null>(null);
+  const syncFrameRef = useRef<number | null>(null);
 
   const moodColors = useMemo(
     () => getMoodColors(environment.lighting.mood),
@@ -133,6 +138,9 @@ export default function SceneRenderer({
       ? THREE.MathUtils.degToRad(scene.interaction.orbitRange / 2)
       : 0;
   const viewerBaseAzimuth = THREE.MathUtils.degToRad(scene.camera.azimuth);
+  const panEnabled = allowNavigation || (viewerEffectsEnabled && scene.interaction.panEnabled);
+  const zoomEnabled = allowNavigation || (viewerEffectsEnabled && scene.interaction.zoomEnabled);
+  const rotateEnabled = allowNavigation || (viewerEffectsEnabled && scene.interaction.orbitEnabled);
 
   useFrame((state, delta) => {
     const content = contentRef.current;
@@ -161,7 +169,7 @@ export default function SceneRenderer({
     content.rotation.y = THREE.MathUtils.lerp(content.rotation.y, targetRotationY, easing);
   });
 
-  const syncCameraToStore = () => {
+  const syncCameraToStore = useCallback(() => {
     const controls = controlsRef.current;
 
     if (!controls) {
@@ -181,15 +189,39 @@ export default function SceneRenderer({
       ...nextCamera,
       fov: camera.fov,
     });
-  };
+  }, [camera.fov, updateCamera]);
+
+  const flushPendingCameraSync = useCallback(() => {
+    if (syncFrameRef.current !== null) {
+      window.cancelAnimationFrame(syncFrameRef.current);
+      syncFrameRef.current = null;
+    }
+
+    syncCameraToStore();
+  }, [syncCameraToStore]);
+
+  const scheduleCameraSync = useCallback(() => {
+    if (syncFrameRef.current !== null) {
+      return;
+    }
+
+    syncFrameRef.current = window.requestAnimationFrame(() => {
+      syncFrameRef.current = null;
+      syncCameraToStore();
+    });
+  }, [syncCameraToStore]);
 
   useEffect(() => {
+    if (!allowNavigation) {
+      return;
+    }
+
+    setBeforeModeChange(flushPendingCameraSync);
+
     return () => {
-      if (syncTimeoutRef.current !== null) {
-        window.clearTimeout(syncTimeoutRef.current);
-      }
+      clearBeforeModeChange(flushPendingCameraSync);
     };
-  }, []);
+  }, [allowNavigation, clearBeforeModeChange, flushPendingCameraSync, setBeforeModeChange]);
 
   useEffect(() => {
     const controls = controlsRef.current;
@@ -217,7 +249,7 @@ export default function SceneRenderer({
   useEffect(() => {
     const controls = controlsRef.current;
 
-    if (!controls || !viewportCommand) {
+    if (!allowNavigation || !controls || !viewportCommand) {
       return;
     }
 
@@ -295,7 +327,7 @@ export default function SceneRenderer({
     controls.object.lookAt(nextTarget);
     controls.update();
     syncCameraToStore();
-  }, [baseScene, camera.fov, updateCamera, viewportCommand, viewportSize.height, viewportSize.width]);
+  }, [allowNavigation, baseScene, camera.fov, updateCamera, viewportCommand, viewportSize.height, viewportSize.width]);
 
   return (
     <Suspense fallback={null}>
@@ -372,8 +404,8 @@ export default function SceneRenderer({
         makeDefault
         enableDamping
         dampingFactor={0.08}
-        enablePan
-        enableZoom
+        enablePan={panEnabled}
+        enableZoom={zoomEnabled}
         screenSpacePanning
         minDistance={0.75}
         maxDistance={28}
@@ -385,7 +417,7 @@ export default function SceneRenderer({
         maxAzimuthAngle={
           viewerEffectsEnabled ? viewerBaseAzimuth + viewerOrbitHalfRange : Infinity
         }
-        enableRotate={!viewerEffectsEnabled || scene.interaction.orbitEnabled}
+        enableRotate={rotateEnabled}
         autoRotate={viewerEffectsEnabled && scene.interaction.autoRotate}
         autoRotateSpeed={scene.interaction.autoRotateSpeed}
         rotateSpeed={0.8}
@@ -401,26 +433,18 @@ export default function SceneRenderer({
           TWO: THREE.TOUCH.DOLLY_PAN,
         }}
         onChange={() => {
-          if (viewerEffectsEnabled) {
+          if (viewerEffectsEnabled || !allowNavigation) {
             return;
           }
 
-          if (syncTimeoutRef.current !== null) {
-            window.clearTimeout(syncTimeoutRef.current);
-          }
-
-          syncTimeoutRef.current = window.setTimeout(() => {
-            syncCameraToStore();
-            syncTimeoutRef.current = null;
-          }, 120);
+          scheduleCameraSync();
         }}
         onEnd={() => {
-          if (syncTimeoutRef.current !== null) {
-            window.clearTimeout(syncTimeoutRef.current);
-            syncTimeoutRef.current = null;
+          if (!allowNavigation) {
+            return;
           }
 
-          syncCameraToStore();
+          flushPendingCameraSync();
         }}
       />
     </Suspense>

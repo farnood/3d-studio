@@ -8,6 +8,8 @@ import type {
 const DEFAULT_GRADIENT_ANGLE = 135;
 const DEFAULT_INTERACTION: InteractionConfig = {
   orbitEnabled: true,
+  panEnabled: true,
+  zoomEnabled: true,
   orbitRange: 30,
   springBack: true,
   springStiffness: 120,
@@ -130,6 +132,8 @@ function isInteractionConfigLike(value: unknown): value is Partial<InteractionCo
 
   return (
     isOptionalBoolean(value.orbitEnabled) &&
+    isOptionalBoolean(value.panEnabled) &&
+    isOptionalBoolean(value.zoomEnabled) &&
     isOptionalFiniteNumber(value.orbitRange) &&
     isOptionalBoolean(value.springBack) &&
     isOptionalFiniteNumber(value.springStiffness) &&
