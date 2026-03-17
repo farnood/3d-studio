@@ -4,6 +4,7 @@ import type {
   InteractionConfig,
   SceneDescriptor,
 } from '../types';
+import { getEffectiveBuiltInModelTargets } from './deviceModelPresets';
 
 const DEFAULT_GRADIENT_ANGLE = 135;
 const DEFAULT_INTERACTION: InteractionConfig = {
@@ -211,6 +212,12 @@ function normalizeScene(scene: SceneDescriptor): SceneDescriptor {
     const customModelUrl = device.customModelUrl?.startsWith('blob:')
       ? null
       : device.customModelUrl ?? null;
+    const { screenMeshNames, screenMaterialNames } =
+      getEffectiveBuiltInModelTargets(
+        customModelUrl,
+        device.screenMeshNames,
+        device.screenMaterialNames,
+      );
 
     return {
       ...device,
@@ -220,8 +227,8 @@ function normalizeScene(scene: SceneDescriptor): SceneDescriptor {
           ? device.customModelAssetUrls ?? null
           : null,
       customModelTransform: customModelUrl ? device.customModelTransform ?? null : null,
-      screenMeshNames: customModelUrl ? device.screenMeshNames ?? null : null,
-      screenMaterialNames: customModelUrl ? device.screenMaterialNames ?? null : null,
+      screenMeshNames,
+      screenMaterialNames,
     };
   });
 

@@ -10,6 +10,19 @@ export type BuiltInDeviceModelPreset = {
   screenMaterialNames?: string[];
 };
 
+const LEGACY_BUILT_IN_DEVICE_MODEL_TARGETS: Record<
+  string,
+  {
+    screenMeshNames?: string[];
+    screenMaterialNames?: string[];
+  }
+> = {
+  '/models/devices/macbook-pro.glb': {
+    screenMeshNames: ['Object_20'],
+    screenMaterialNames: ['Material.010'],
+  },
+};
+
 export const BUILT_IN_DEVICE_MODEL_PRESETS: BuiltInDeviceModelPreset[] = [
   {
     id: 'iphone-15-pro-max',
@@ -82,8 +95,8 @@ export const BUILT_IN_DEVICE_MODEL_PRESETS: BuiltInDeviceModelPreset[] = [
       position: [0, -1.406, 1.906],
       scale: 12.5,
     },
-    screenMeshNames: ['Object_20'],
-    screenMaterialNames: ['Material.010'],
+    screenMeshNames: ['Object_25'],
+    screenMaterialNames: ['Material.009'],
   },
 ];
 
@@ -105,6 +118,48 @@ export function findBuiltInDeviceModelPresetByUrl(
       (preset) => preset.customModelUrl === customModelUrl,
     ) ?? null
   );
+}
+
+function matchesAnyTarget(
+  currentNames: string[] | null | undefined,
+  legacyNames: string[] | undefined,
+) {
+  if (!currentNames || !legacyNames?.length) {
+    return false;
+  }
+
+  return currentNames.some((name) => legacyNames.includes(name));
+}
+
+export function getEffectiveBuiltInModelTargets(
+  customModelUrl: string | null | undefined,
+  screenMeshNames: string[] | null | undefined,
+  screenMaterialNames: string[] | null | undefined,
+) {
+  const preset = findBuiltInDeviceModelPresetByUrl(customModelUrl);
+
+  if (!preset) {
+    return {
+      screenMeshNames: screenMeshNames ?? null,
+      screenMaterialNames: screenMaterialNames ?? null,
+    };
+  }
+
+  const legacyTargets = customModelUrl
+    ? LEGACY_BUILT_IN_DEVICE_MODEL_TARGETS[customModelUrl]
+    : undefined;
+  const shouldReplaceWithPreset =
+    matchesAnyTarget(screenMeshNames, legacyTargets?.screenMeshNames) ||
+    matchesAnyTarget(screenMaterialNames, legacyTargets?.screenMaterialNames);
+
+  return {
+    screenMeshNames: shouldReplaceWithPreset
+      ? preset.screenMeshNames ?? null
+      : screenMeshNames ?? preset.screenMeshNames ?? null,
+    screenMaterialNames: shouldReplaceWithPreset
+      ? preset.screenMaterialNames ?? null
+      : screenMaterialNames ?? preset.screenMaterialNames ?? null,
+  };
 }
 
 export function createBuiltInDeviceModelUpdate(

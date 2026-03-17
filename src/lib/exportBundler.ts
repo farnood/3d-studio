@@ -1,4 +1,5 @@
 import type { SceneDescriptor } from '../types';
+import { getEffectiveBuiltInModelTargets } from './deviceModelPresets';
 import { getBackgroundCss } from './sceneUtils';
 
 function blobToDataUrl(blob: Blob) {
@@ -47,6 +48,14 @@ async function inlineSceneAssets(scene: SceneDescriptor) {
 
   await Promise.all(
     nextScene.devices.map(async (device) => {
+      const effectiveTargets = getEffectiveBuiltInModelTargets(
+        device.customModelUrl,
+        device.screenMeshNames,
+        device.screenMaterialNames,
+      );
+      device.screenMeshNames = effectiveTargets.screenMeshNames;
+      device.screenMaterialNames = effectiveTargets.screenMaterialNames;
+
       if (device.customModelUrl) {
         device.customModelUrl = await fetchAsDataUrl(device.customModelUrl);
       }
@@ -248,7 +257,7 @@ export async function generateExportHtml(scene: SceneDescriptor): Promise<string
         const gltfLoader = new GLTFLoader();
         
         function createScreenMaterial(texture, brightness) {
-            return new THREE.MeshStandardMaterial({
+            const material = new THREE.MeshStandardMaterial({
                 color: 0x111111,
                 map: texture,
                 emissive: 0xffffff,
@@ -257,6 +266,64 @@ export async function generateExportHtml(scene: SceneDescriptor): Promise<string
                 roughness: 0.1,
                 metalness: 0.1
             });
+
+            material.userData.codexScreenMaterial = true;
+            material.userData.codexScreenTexture = texture;
+            return material;
+        }
+
+        function getScreenUvBounds(mesh) {
+            const uvAttribute = mesh.geometry.getAttribute('uv');
+
+            if (!uvAttribute || uvAttribute.itemSize < 2 || uvAttribute.count === 0) {
+                return null;
+            }
+
+            let minU = Infinity;
+            let minV = Infinity;
+            let maxU = -Infinity;
+            let maxV = -Infinity;
+
+            for (let index = 0; index < uvAttribute.count; index += 1) {
+                const u = uvAttribute.getX(index);
+                const v = uvAttribute.getY(index);
+                minU = Math.min(minU, u);
+                minV = Math.min(minV, v);
+                maxU = Math.max(maxU, u);
+                maxV = Math.max(maxV, v);
+            }
+
+            const spanU = maxU - minU;
+            const spanV = maxV - minV;
+
+            if (spanU <= 0.00001 || spanV <= 0.00001) {
+                return null;
+            }
+
+            return { minU, minV, spanU, spanV };
+        }
+
+        function createScreenTextureForMesh(texture, mesh) {
+            if (!texture) {
+                return null;
+            }
+
+            const nextTexture = texture.clone();
+            nextTexture.colorSpace = THREE.SRGBColorSpace;
+            nextTexture.minFilter = THREE.LinearFilter;
+
+            const uvBounds = getScreenUvBounds(mesh);
+
+            if (uvBounds) {
+                nextTexture.repeat.set(1 / uvBounds.spanU, 1 / uvBounds.spanV);
+                nextTexture.offset.set(
+                    -uvBounds.minU / uvBounds.spanU,
+                    -uvBounds.minV / uvBounds.spanV
+                );
+            }
+
+            nextTexture.needsUpdate = true;
+            return nextTexture;
         }
 
         function normalizeTargetNames(names) {
@@ -272,21 +339,53 @@ export async function generateExportHtml(scene: SceneDescriptor): Promise<string
             return targetMaterialNames.has((material.name || '').toLowerCase());
         }
 
+        function disposeScreenMaterial(material) {
+            const screenTexture = material.userData && material.userData.codexScreenTexture;
+
+            if (screenTexture && typeof screenTexture.dispose === 'function') {
+                screenTexture.dispose();
+                material.userData.codexScreenTexture = null;
+            }
+
+            if (!material.userData || !material.userData.codexScreenMaterial) {
+                return;
+            }
+
+            material.userData.codexScreenMaterial = false;
+            material.dispose();
+        }
+
         function assignScreenMaterialToMesh(mesh, texture, brightness, targetMeshNames, targetMaterialNames) {
-            const screenMaterial = createScreenMaterial(texture, brightness);
+            let screenMaterial = null;
+            const getScreenMaterial = () => {
+                if (!screenMaterial) {
+                    screenMaterial = createScreenMaterial(
+                        createScreenTextureForMesh(texture, mesh),
+                        brightness
+                    );
+                }
+
+                return screenMaterial;
+            };
 
             if (isScreenMesh(mesh, targetMeshNames)) {
-                mesh.material = screenMaterial;
+                if (Array.isArray(mesh.material)) {
+                    mesh.material.forEach(disposeScreenMaterial);
+                } else {
+                    disposeScreenMaterial(mesh.material);
+                }
+
+                mesh.material = getScreenMaterial();
                 return;
             }
 
             if (!Array.isArray(mesh.material)) {
                 if (!isScreenMaterial(mesh.material, targetMaterialNames)) {
-                    screenMaterial.dispose();
                     return;
                 }
 
-                mesh.material = screenMaterial;
+                disposeScreenMaterial(mesh.material);
+                mesh.material = getScreenMaterial();
                 return;
             }
 
@@ -297,7 +396,8 @@ export async function generateExportHtml(scene: SceneDescriptor): Promise<string
                 }
 
                 hasReplacement = true;
-                return screenMaterial;
+                disposeScreenMaterial(entry);
+                return getScreenMaterial();
             });
 
             if (hasReplacement) {
@@ -305,7 +405,9 @@ export async function generateExportHtml(scene: SceneDescriptor): Promise<string
                 return;
             }
 
-            screenMaterial.dispose();
+            if (screenMaterial) {
+                disposeScreenMaterial(screenMaterial);
+            }
         }
 
         function normalizeAssetPath(path) {

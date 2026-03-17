@@ -4,12 +4,72 @@ import * as THREE from 'three';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { DevicePlacement } from '../types';
+import { getEffectiveBuiltInModelTargets } from '../lib/deviceModelPresets';
 import { resolveUploadedModelAssetUrl } from '../lib/modelUpload';
 
 function configureTexture(texture: THREE.Texture) {
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.minFilter = THREE.LinearFilter;
   texture.needsUpdate = true;
+}
+
+function getScreenUvBounds(mesh: THREE.Mesh) {
+  const uvAttribute = mesh.geometry.getAttribute('uv');
+
+  if (!uvAttribute || uvAttribute.itemSize < 2 || uvAttribute.count === 0) {
+    return null;
+  }
+
+  let minU = Infinity;
+  let minV = Infinity;
+  let maxU = -Infinity;
+  let maxV = -Infinity;
+
+  for (let index = 0; index < uvAttribute.count; index += 1) {
+    const u = uvAttribute.getX(index);
+    const v = uvAttribute.getY(index);
+
+    minU = Math.min(minU, u);
+    minV = Math.min(minV, v);
+    maxU = Math.max(maxU, u);
+    maxV = Math.max(maxV, v);
+  }
+
+  const spanU = maxU - minU;
+  const spanV = maxV - minV;
+
+  if (spanU <= 0.00001 || spanV <= 0.00001) {
+    return null;
+  }
+
+  return { minU, minV, spanU, spanV };
+}
+
+function createScreenTextureForMesh(
+  texture: THREE.Texture | null,
+  mesh: THREE.Mesh,
+) {
+  if (!texture) {
+    return null;
+  }
+
+  const nextTexture = texture.clone();
+  configureTexture(nextTexture);
+
+  const uvBounds = getScreenUvBounds(mesh);
+
+  if (!uvBounds) {
+    return nextTexture;
+  }
+
+  nextTexture.repeat.set(1 / uvBounds.spanU, 1 / uvBounds.spanV);
+  nextTexture.offset.set(
+    -uvBounds.minU / uvBounds.spanU,
+    -uvBounds.minV / uvBounds.spanV,
+  );
+  nextTexture.needsUpdate = true;
+
+  return nextTexture;
 }
 
 function createScreenMaterial(texture: THREE.Texture | null, brightness: number) {
@@ -24,6 +84,7 @@ function createScreenMaterial(texture: THREE.Texture | null, brightness: number)
   });
 
   material.userData.codexScreenMaterial = true;
+  material.userData.codexScreenTexture = texture;
 
   return material;
 }
@@ -52,9 +113,19 @@ function isScreenMesh(
 }
 
 function disposeScreenMaterial(material: THREE.Material) {
-  if (material.userData?.codexScreenMaterial) {
-    material.dispose();
+  const screenTexture = material.userData?.codexScreenTexture;
+
+  if (screenTexture instanceof THREE.Texture) {
+    screenTexture.dispose();
+    material.userData.codexScreenTexture = null;
   }
+
+  if (!material.userData?.codexScreenMaterial) {
+    return;
+  }
+
+  material.userData.codexScreenMaterial = false;
+  material.dispose();
 }
 
 function assignScreenMaterialToMesh(
@@ -64,7 +135,18 @@ function assignScreenMaterialToMesh(
   targetMeshNames: Set<string>,
   targetMaterialNames: Set<string>,
 ) {
-  const screenMaterial = createScreenMaterial(texture, brightness);
+  let screenMaterial: THREE.MeshStandardMaterial | null = null;
+
+  const getScreenMaterial = () => {
+    if (!screenMaterial) {
+      screenMaterial = createScreenMaterial(
+        createScreenTextureForMesh(texture, mesh),
+        brightness,
+      );
+    }
+
+    return screenMaterial;
+  };
 
   if (isScreenMesh(mesh, targetMeshNames)) {
     if (Array.isArray(mesh.material)) {
@@ -73,18 +155,17 @@ function assignScreenMaterialToMesh(
       disposeScreenMaterial(mesh.material);
     }
 
-    mesh.material = screenMaterial;
+    mesh.material = getScreenMaterial();
     return;
   }
 
   if (!Array.isArray(mesh.material)) {
     if (!isScreenMaterial(mesh.material, targetMaterialNames)) {
-      screenMaterial.dispose();
       return;
     }
 
     disposeScreenMaterial(mesh.material);
-    mesh.material = screenMaterial;
+    mesh.material = getScreenMaterial();
     return;
   }
 
@@ -96,11 +177,14 @@ function assignScreenMaterialToMesh(
 
     hasReplacement = true;
     disposeScreenMaterial(entry);
-    return screenMaterial;
+    return getScreenMaterial();
   });
 
   if (!hasReplacement) {
-    screenMaterial.dispose();
+    if (screenMaterial) {
+      disposeScreenMaterial(screenMaterial);
+    }
+
     return;
   }
 
@@ -212,13 +296,22 @@ function ProceduralGeometry({ device }: { device: DevicePlacement }) {
 function CustomGLTFModel({ device }: { device: DevicePlacement }) {
   const [scene, setScene] = useState<THREE.Group | THREE.Object3D | null>(null);
   const clonedScene = useMemo(() => scene?.clone() ?? null, [scene]);
+  const effectiveTargets = useMemo(
+    () =>
+      getEffectiveBuiltInModelTargets(
+        device.customModelUrl,
+        device.screenMeshNames,
+        device.screenMaterialNames,
+      ),
+    [device.customModelUrl, device.screenMaterialNames, device.screenMeshNames],
+  );
   const screenMeshNames = useMemo(
-    () => getScreenTargetNames(device.screenMeshNames),
-    [device.screenMeshNames],
+    () => getScreenTargetNames(effectiveTargets.screenMeshNames),
+    [effectiveTargets.screenMeshNames],
   );
   const screenMaterialNames = useMemo(
-    () => getScreenTargetNames(device.screenMaterialNames),
-    [device.screenMaterialNames],
+    () => getScreenTargetNames(effectiveTargets.screenMaterialNames),
+    [effectiveTargets.screenMaterialNames],
   );
   const uploadedAssetUrls = device.customModelAssetUrls ?? null;
 
